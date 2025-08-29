@@ -1,0 +1,23 @@
+activar entorno virtual 
+
+    python3 -m venv gym
+
+activar entorno 
+
+    source venv/bin/activate # mac
+    venv\Scripts\activate.bat # linux
+
+instalar librerias 
+
+    pip3 install -r requirements.txt
+
+Migrar base de datos
+
+    alembic downgrade base
+    alembic stamp base 
+    alembic revision --autogenerate -m "comentario"
+    alembic upgrade head 
+
+arrancar pc 
+
+    python -m uvicorn app.main:app --reload

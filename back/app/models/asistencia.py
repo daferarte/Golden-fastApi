@@ -1,0 +1,15 @@
+from sqlalchemy import Column, Integer, ForeignKey, DateTime, String
+from sqlalchemy.orm import relationship
+from app.db.base_class import Base
+
+class Asistencia(Base):
+    __tablename__ = 'asistencia'
+
+    id = Column(Integer, primary_key=True, index=True)
+    id_cliente = Column(Integer, ForeignKey('cliente.id'))
+    id_venta = Column(Integer, ForeignKey('venta_membresia.id'))
+    id_sede = Column(Integer, ForeignKey('sede.id'))
+    fecha_hora_entrada = Column(DateTime)
+    tipo_acceso = Column(String(120))
+
+    cliente = relationship('Cliente', back_populates='asistencias')

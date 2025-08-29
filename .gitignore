@@ -1,0 +1,61 @@
+# === Python / FastAPI ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.so
+*.egg-info/
+pip-wheel-metadata/
+.venv/
+venv/
+gym/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+.pyre/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# PEP 582
+__pypackages__/
+
+# === Alembic ===
+alembic/**/__pycache__/
+# (No ignores para scripts de migración. ¡Versiona tus migraciones!)
+
+# === Bases de datos locales / dumps ===
+*.db
+*.sqlite3
+*.sql
+*.sql.gz
+
+# === Logs y runtime ===
+*.log
+logs/
+*.pid
+*.pid.lock
+
+# === Archivos temporales / OS ===
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# === IDEs ===
+.vscode/
+.idea/
+*.iml
+
+
+# === Static / uploads (si usas) ===
+media/
+uploads/
+staticfiles/
+# (deja un .gitkeep si necesitas la carpeta en el repo)
+
+# === Node/Front (si el repo tiene front junto al back) ===
+node_modules/
+dist/
+build/

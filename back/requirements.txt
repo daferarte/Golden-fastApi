@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pymysql
+python-dotenv
+alembic
+pydantic
+pydantic-settings>=2.3.4
+pydantic[email]
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+opencv-python-headless
+numpy
+python -m pip install -U pip setuptools wheel
