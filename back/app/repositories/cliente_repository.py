@@ -1,11 +1,12 @@
 from sqlalchemy.orm import Session
-
+from datetime import date
 from app.models.cliente import Cliente
 from app.schemas.cliente import ClienteCreate, ClienteBase
 from .base import BaseRepository
-from typing import Optional, List
-from sqlalchemy import asc, desc
+from typing import Optional, List, Tuple
+from sqlalchemy import asc, select, func, and_, desc, case
 from sqlalchemy import func, or_
+from app.models.venta_membresia import VentaMembresia
 
 class ClienteRepository(BaseRepository):
     def __init__(self):
@@ -131,3 +132,167 @@ class ClienteRepository(BaseRepository):
         query = query.order_by(column.desc() if descending else column.asc())
 
         return query.offset(offset).limit(limit).all()
+    
+    def _compute_estado(self, fecha_fin: Optional[date], sesiones_restantes: Optional[int], estado_db: Optional[str]) -> str:
+        """
+        Si DB ya tiene 'estado', úsalo como preferencia.
+        Si no, calculamos:
+        - vencida si fecha_fin < hoy o sesiones_restantes <= 0
+        - activa si hay venta vigente
+        - sin_membresia si no hay venta
+        """
+        if estado_db:
+            return estado_db
+
+        if fecha_fin is None and sesiones_restantes is None:
+            return "sin_membresia"
+
+        today = date.today()
+        if (fecha_fin is not None and fecha_fin < today) or (sesiones_restantes is not None and sesiones_restantes <= 0):
+            return "vencida"
+        return "activa"
+    
+    def get_membership_summary_by_cliente_id(self, db: Session, cliente_id: int) -> Optional[dict]:
+        """
+        Última venta de membresía para un cliente (por fecha_inicio DESC)
+        """
+        # subquery: última venta por fecha_inicio
+        subq = (
+            select(VentaMembresia.id, VentaMembresia.id_cliente)
+            .where(VentaMembresia.id_cliente == cliente_id)
+            .order_by(VentaMembresia.fecha_inicio.desc())
+            .limit(1)
+            .subquery()
+        )
+
+        stmt = (
+            select(
+                Cliente.id.label("id"),
+                Cliente.fotografia.label("foto"),
+                Cliente.nombre,
+                Cliente.apellido,
+                Cliente.documento,
+                VentaMembresia.fecha_inicio,
+                VentaMembresia.fecha_fin,
+                VentaMembresia.precio_final.label("precio"),
+                VentaMembresia.sesiones_restantes,
+                VentaMembresia.estado,
+            )
+            .select_from(Cliente)
+            .join(subq, subq.c.id_cliente == Cliente.id, isouter=True)
+            .join(VentaMembresia, VentaMembresia.id == subq.c.id, isouter=True)
+            .where(Cliente.id == cliente_id)
+        )
+
+        row = db.execute(stmt).mappings().first()
+        if not row:
+            return None
+
+        estado = self._compute_estado(row.get("fecha_fin"), row.get("sesiones_restantes"), row.get("estado"))
+        return {
+            "id": row["id"],
+            "foto": row.get("foto"),
+            "nombre": row["nombre"],
+            "apellido": row["apellido"],
+            "documento": row["documento"],
+            "fecha_inicio": row.get("fecha_inicio"),
+            "fecha_fin": row.get("fecha_fin"),
+            "precio": float(row["precio"]) if row.get("precio") is not None else None,
+            "sesiones_restantes": row.get("sesiones_restantes"),
+            "estado": estado,
+        }
+        
+    def count_membership_summaries(self, db: Session, q: Optional[str]) -> int:
+        """
+        Total de clientes que matchean el filtro (sobre datos del cliente).
+        """
+        stmt = select(func.count(Cliente.id))
+        if q:
+            like = f"%{q}%"
+            stmt = stmt.where(
+                func.concat(Cliente.nombre, " ", Cliente.apellido).like(like) |
+                Cliente.documento.like(like) |
+                Cliente.correo.like(like)
+            )
+        return db.scalar(stmt) or 0
+
+    def list_membership_summaries_paginated(
+        self,
+        db: Session,
+        q: Optional[str],
+        offset: int,
+        limit: int,
+        order_by_fecha_inicio_desc: bool = True,
+    ) -> List[dict]:
+        """
+        Lista paginada: para cada cliente, su última venta de membresía (si existe).
+        """
+        # subquery: última fecha por cliente
+        latest_per_cliente = (
+            select(
+                VentaMembresia.id_cliente.label("id_cliente"),
+                func.max(VentaMembresia.fecha_inicio).label("max_fecha")
+            )
+            .group_by(VentaMembresia.id_cliente)
+            .subquery()
+        )
+
+        stmt = (
+            select(
+                Cliente.id.label("id"),
+                Cliente.fotografia.label("foto"),
+                Cliente.nombre,
+                Cliente.apellido,
+                Cliente.documento,
+                VentaMembresia.fecha_inicio,
+                VentaMembresia.fecha_fin,
+                VentaMembresia.precio_final.label("precio"),
+                VentaMembresia.sesiones_restantes,
+                VentaMembresia.estado,
+            )
+            .select_from(Cliente)
+            .join(latest_per_cliente, latest_per_cliente.c.id_cliente == Cliente.id, isouter=True)
+            .join(
+                VentaMembresia,
+                and_(
+                    VentaMembresia.id_cliente == latest_per_cliente.c.id_cliente,
+                    VentaMembresia.fecha_inicio == latest_per_cliente.c.max_fecha,
+                ),
+                isouter=True,
+            )
+        )
+
+        if q:
+            like = f"%{q}%"
+            stmt = stmt.where(
+                func.concat(Cliente.nombre, " ", Cliente.apellido).like(like) |
+                Cliente.documento.like(like) |
+                Cliente.correo.like(like)
+            )
+
+        # Orden: por última fecha_inicio (desc) o por nombre
+        if order_by_fecha_inicio_desc:
+            stmt = stmt.order_by(VentaMembresia.fecha_inicio.is_(None).asc(),
+                     VentaMembresia.fecha_inicio.desc())
+        else:
+            stmt = stmt.order_by(Cliente.nombre.asc(), Cliente.apellido.asc())
+
+        stmt = stmt.offset(offset).limit(limit)
+
+        rows = db.execute(stmt).mappings().all()
+        out: List[dict] = []
+        for r in rows:
+            estado = self._compute_estado(r.get("fecha_fin"), r.get("sesiones_restantes"), r.get("estado"))
+            out.append({
+                "id": r["id"],
+                "foto": r.get("foto"),
+                "nombre": r["nombre"],
+                "apellido": r["apellido"],
+                "documento": r["documento"],
+                "fecha_inicio": r.get("fecha_inicio"),
+                "fecha_fin": r.get("fecha_fin"),
+                "precio": float(r["precio"]) if r.get("precio") is not None else None,
+                "sesiones_restantes": r.get("sesiones_restantes"),
+                "estado": estado,
+            })
+        return out

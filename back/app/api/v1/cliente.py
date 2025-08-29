@@ -9,6 +9,9 @@ import binascii
 from app.repositories.cliente_repository import ClienteRepository
 from typing import Optional, Dict
 from app.schemas.common import Page
+from app.schemas.membresia_resumen import ResumenMembresia
+
+
 
 router = APIRouter()
 service = ClienteService()
@@ -136,3 +139,45 @@ def get_cliente_by_huella(id_huella: int, db: Session = Depends(get_db)):
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente con esa huella no fue encontrado")
     return cliente
+
+@router.get("/{cliente_id}/membresia-actual", response_model=ResumenMembresia)
+def obtener_membresia_actual(cliente_id: int, db: Session = Depends(get_db)):
+    """
+    Última venta de membresía para un cliente: foto, nombre, apellido,
+    fecha_inicio, fecha_fin, precio, sesiones_restantes, estado.
+    """
+    resumen = service.get_membership_summary(db, cliente_id)
+    if not resumen:
+        raise HTTPException(status_code=404, detail="Cliente sin membresía registrada")
+    return resumen
+
+@router.get("/membresias/resumen", response_model=Page[ResumenMembresia])
+def listar_resumen_membresias(
+    request: Request,
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=200),
+    q: Optional[str] = Query(None, description="Buscar por nombre, documento o correo"),
+):
+    """
+    Lista paginada: por cada cliente, su última venta de membresía (si existe).
+    """
+    total, items = service.list_membership_summaries(db, page=page, size=size, q=q)
+    pages = (total + size - 1) // size if total else 1
+
+    def link_for(p: int) -> Optional[str]:
+        if p < 1 or (total and p > pages):
+            return None
+        return str(request.url.include_query_params(page=p, size=size, q=q))
+
+    return {
+        "items": items,
+        "page": page,
+        "size": size,
+        "total": total,
+        "pages": pages,
+        "has_next": page < pages,
+        "has_prev": page > 1,
+        "next": link_for(page + 1) if page < pages else None,
+        "prev": link_for(page - 1) if page > 1 else None,
+    }

@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 from app.repositories.cliente_repository import ClienteRepository
 from .base_service import BaseService
 from .fingerprint import Fingerprint  # <-- IMPORTANTE: Importa la clase del archivo local
-from typing import Optional, Tuple  # arriba en imports
+from typing import Optional, Tuple, List
+from app.schemas.membresia_resumen import ResumenMembresia
 
 class ClienteService(BaseService):
     def __init__(self):
@@ -95,3 +96,19 @@ class ClienteService(BaseService):
             limit=size,
         )
         return total, items, pages, page
+    
+    def get_membership_summary(self, db: Session, cliente_id: int) -> Optional[ResumenMembresia]:
+        data = self.repository.get_membership_summary_by_cliente_id(db, cliente_id)
+        return ResumenMembresia(**data) if data else None
+
+    def list_membership_summaries(
+        self,
+        db: Session,
+        page: int,
+        size: int,
+        q: Optional[str],
+    ) -> Tuple[int, List[ResumenMembresia]]:
+        total = self.repository.count_membership_summaries(db, q=q)
+        offset = (max(page, 1) - 1) * size
+        rows = self.repository.list_membership_summaries_paginated(db, q=q, offset=offset, limit=size)
+        return total, [ResumenMembresia(**r) for r in rows]
