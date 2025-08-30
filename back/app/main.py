@@ -6,6 +6,7 @@ from app.api.v1.api import api_router
 from app.core.config import settings
 from app.db.base import Base
 from app.db.session import engine  # sync engine
+import logging
 
 # Crear tablas si no existen (solo para desarrollo)
 def init_models():
@@ -34,6 +35,7 @@ app = get_application()
 # Ruta base: .../back/media
 MEDIA_ROOT = Path(__file__).resolve().parent.parent / "media"
 MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+app.mount("/media", StaticFiles(directory=str(MEDIA_ROOT)), name="media")
 
 # Servir /media/*
 app.mount("/media", StaticFiles(directory=str(MEDIA_ROOT)), name="media")
@@ -41,5 +43,6 @@ app.mount("/media", StaticFiles(directory=str(MEDIA_ROOT)), name="media")
 # Evento de inicio de la app
 @app.on_event("startup")
 def on_startup():
+    logging.getLogger("uvicorn").info(f"MEDIA_ROOT -> {MEDIA_ROOT}")
     if settings.ENVIRONMENT == "development":
         init_models()

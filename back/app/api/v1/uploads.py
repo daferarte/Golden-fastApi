@@ -1,12 +1,14 @@
-# app/api/v1/uploads.py (o dentro de cliente.py)
+# app/api/v1/uploads.py
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from pathlib import Path
 import re
 
-router = APIRouter()
+router = APIRouter(prefix="/files", tags=["files"])
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent  # .../back
-MEDIA_ROOT = BASE_DIR / "media"
+# __file__ = back/app/api/v1/uploads.py
+# parents[0]=v1, [1]=api, [2]=app, [3]=back  -> queremos 'back'
+BACK_DIR = Path(__file__).resolve().parents[3]
+MEDIA_ROOT = BACK_DIR / "media"
 FOTOS_DIR = MEDIA_ROOT / "fotos"
 FOTOS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -15,14 +17,13 @@ async def upload_foto(documento: str = Form(...), file: UploadFile = File(...)):
     # Validar doc y tipo
     safe_doc = re.sub(r"[^a-zA-Z0-9_\-]", "", documento)
     if not safe_doc:
-        raise HTTPException(400, "Documento inválido.")
+        raise HTTPException(status_code=400, detail="Documento inválido.")
     if file.content_type not in ("image/jpeg", "image/png"):
-        raise HTTPException(400, "Solo JPG o PNG.")
+        raise HTTPException(status_code=400, detail="Solo JPG o PNG.")
 
     ext = ".jpg" if file.content_type == "image/jpeg" else ".png"
     dest_path = FOTOS_DIR / f"{safe_doc}{ext}"
 
-    # Guardar en disco por chunks
     try:
         with dest_path.open("wb") as f:
             while True:
@@ -31,8 +32,8 @@ async def upload_foto(documento: str = Form(...), file: UploadFile = File(...)):
                     break
                 f.write(chunk)
     except Exception as e:
-        raise HTTPException(500, f"No se pudo guardar la foto: {e}")
+        raise HTTPException(status_code=500, detail=f"No se pudo guardar la foto: {e}")
 
-    # Ruta/URL que podrá usar el front
+    # Ruta pública que usará el front para mostrar la imagen
     ruta = f"/media/fotos/{safe_doc}{ext}"
     return {"ruta": ruta}
