@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware  # Importar middleware CORS
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from app.api.v1.api import api_router
 from app.core.config import settings
 from app.db.base import Base
@@ -28,6 +30,13 @@ def get_application() -> FastAPI:
     return app
 
 app = get_application()
+
+# Ruta base: .../back/media
+MEDIA_ROOT = Path(__file__).resolve().parent.parent / "media"
+MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+
+# Servir /media/*
+app.mount("/media", StaticFiles(directory=str(MEDIA_ROOT)), name="media")
 
 # Evento de inicio de la app
 @app.on_event("startup")

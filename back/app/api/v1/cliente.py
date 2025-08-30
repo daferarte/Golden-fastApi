@@ -11,6 +11,12 @@ from typing import Optional, Dict
 from app.schemas.common import Page
 from app.schemas.membresia_resumen import ResumenMembresia
 
+from app.schemas.cliente_membresia import (
+    CrearClienteYVentaRequest,
+    CrearClienteYVentaResponse,
+    ActualizarClienteYVentaRequest
+)
+from app.services.cliente_membresia_service import crear_cliente_y_venta, update_cliente_y_venta
 
 
 router = APIRouter()
@@ -181,3 +187,19 @@ def listar_resumen_membresias(
         "next": link_for(page + 1) if page < pages else None,
         "prev": link_for(page - 1) if page > 1 else None,
     }
+    
+@router.post("/with-membresia", response_model=CrearClienteYVentaResponse, status_code=201)
+def crear_cliente_con_membresia(payload: CrearClienteYVentaRequest, db: Session = Depends(get_db)):
+    return crear_cliente_y_venta(db, payload)
+
+@router.put("/clientes/{cliente_id}/with-membresia", response_model=CrearClienteYVentaResponse,
+    summary="Actualiza datos del cliente y su venta de membresía (parcial)",
+)
+def actualizar_cliente_con_membresia(cliente_id: int, payload: ActualizarClienteYVentaRequest, db: Session = Depends(get_db),):
+    """
+    - Si `venta.id` viene, se actualiza esa venta del cliente.
+    - Si **no** viene `venta.id`, se toma la venta **más reciente** del cliente (por `fecha_inicio`).
+    - Si el cliente **no tiene ventas** y el payload trae datos de venta, se crea **una nueva** (requiere `id_membresia`).
+    - El update es **parcial**: sólo aplica a los campos enviados.
+    """
+    return update_cliente_y_venta(db, cliente_id, payload)

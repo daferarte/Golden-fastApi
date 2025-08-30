@@ -1,14 +1,15 @@
 from fastapi import APIRouter
 from app.api.v1 import (
     cliente, sedes, membresias, ventas_membresias, asistencias,
-    facturas, detalles_facturas, usuarios, roles, tipos_descuento, reportes_asistencia, acceso, dispositivo_router
+    facturas, detalles_facturas, usuarios, roles, tipos_descuento, reportes_asistencia, acceso, dispositivo_router,
+    uploads
 )
 
 api_router = APIRouter()
 
 api_router.include_router(dispositivo_router.router, prefix="/dispositivo", tags=["Control Dispositivo"])
 api_router.include_router(acceso.router, prefix="/acceso", tags=["Control de Acceso"])
-
+api_router.include_router(uploads.router, prefix="/uploads", tags=["uploads"])
 api_router.include_router(cliente.router, prefix="/clientes", tags=["Clientes"])
 api_router.include_router(sedes.router, prefix="/sedes", tags=["Sedes"])
 api_router.include_router(membresias.router, prefix="/membresias", tags=["Membresías"])
