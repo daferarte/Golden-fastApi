@@ -39,7 +39,7 @@ def upgrade() -> None:
             KEY idx_hp_log_cliente (cliente_id),
             KEY idx_hp_log_fecha (fecha_purgado),
             KEY idx_hp_log_ultfin (fecha_fin_ultima_membresia)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
         """)
 
         # 2) SP: purga biometría si la ÚLTIMA membresía terminó hace ≥ 3 meses
