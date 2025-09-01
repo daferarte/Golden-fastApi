@@ -93,6 +93,7 @@ def crear_cliente_y_venta(db: Session, payload: CrearClienteYVentaRequest) -> Cr
             telefono=payload.cliente.telefono,
             direccion=payload.cliente.direccion,
             fotografia=fotografia_ruta,      # <- string ruta; comenta si tu columna es binaria
+            id_tipo_descuento= payload.cliente.id_tipo_descuento,
             huella_template=huella_bytes or None,
             id_huella=id_huella,
         )

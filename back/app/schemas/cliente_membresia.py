@@ -12,6 +12,7 @@ class ClienteIn(BaseModel):
     correo: Optional[str] = None
     telefono: Optional[str] = None
     direccion: Optional[str] = None
+    id_tipo_descuento: Optional[int] = None
     fotografia: Optional[str] = None  # si la envías como base64
     huella_base64: Optional[str] = None      # si la envías como base64
 
@@ -30,6 +31,7 @@ class ClienteUpdateIn(BaseModel):
     fecha_nacimiento: Optional[date] = None
     correo: Optional[str] = None
     telefono: Optional[str] = None
+    id_tipo_descuento: Optional[int] = None
     direccion: Optional[str] = None
     # Si tu modelo 'fotografia' es ruta (string) puedes usar esto:
     fotografia: Optional[str] = None
@@ -58,6 +60,7 @@ class ClienteOut(BaseModel):
     documento: str
     correo: Optional[str] = None
     telefono: Optional[str] = None
+    id_tipo_descuento: Optional[int] = None
     direccion: Optional[str] = None
     id_huella: Optional[int] = None
 
