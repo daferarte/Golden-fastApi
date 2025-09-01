@@ -37,9 +37,6 @@ MEDIA_ROOT = Path(__file__).resolve().parent.parent / "media"
 MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
 app.mount("/media", StaticFiles(directory=str(MEDIA_ROOT)), name="media")
 
-# Servir /media/*
-app.mount("/media", StaticFiles(directory=str(MEDIA_ROOT)), name="media")
-
 # Evento de inicio de la app
 @app.on_event("startup")
 def on_startup():

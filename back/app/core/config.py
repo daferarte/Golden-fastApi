@@ -11,8 +11,8 @@ class Settings(BaseSettings):
     ENVIRONMENT: Literal["development", "production", "test"] = "development"
 
     # -------- Seguridad --------
-    SECRET_KEY: str = "supersecret"  # cámbialo en producción
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 día
+    SECRET_KEY: str = "supersecret"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     ALGORITHM: str = "HS256"
 
     # -------- Integraciones / Infra --------
@@ -25,6 +25,13 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+    
+    @property
+    def secret_key(self): return self.SECRET_KEY
+    @property
+    def algorithm(self): return self.ALGORITHM
+    @property
+    def access_token_expire_minutes(self): return self.ACCESS_TOKEN_EXPIRE_MINUTES
 
 @lru_cache()
 def get_settings() -> Settings:
