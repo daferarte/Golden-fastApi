@@ -17,3 +17,4 @@ class VentaMembresia(Base):
     cliente = relationship('Cliente', back_populates='ventas')
     
     membresia = relationship('Membresia', back_populates='ventas')
+    asistencias = relationship('Asistencia', back_populates='venta')

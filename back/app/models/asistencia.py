@@ -13,3 +13,4 @@ class Asistencia(Base):
     tipo_acceso = Column(String(120))
 
     cliente = relationship('Cliente', back_populates='asistencias')
+    venta = relationship('VentaMembresia', back_populates='asistencias')

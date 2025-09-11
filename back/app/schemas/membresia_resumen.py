@@ -11,6 +11,7 @@ class ResumenMembresia(BaseModel):
     apellido: str
 
     # Datos de la última venta de membresía (si existe)
+    id_venta: Optional[int] = None
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None
     precio: Optional[float] = None
