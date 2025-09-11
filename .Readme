@@ -1,15 +1,16 @@
 activar entorno virtual 
 
-    python3 -m venv gym
+    python -m venv gym
 
 activar entorno 
 
     source venv/bin/activate # mac
     venv\Scripts\activate.bat # linux
+.\gym\Scripts\activate
 
 instalar librerias 
 
-    pip3 install -r requirements.txt
+    pip install -r requirements.txt
 
 Migrar base de datos
 
@@ -20,4 +21,4 @@ Migrar base de datos
 
 arrancar pc 
 
-    python -m uvicorn app.main:app --reload
+    python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000

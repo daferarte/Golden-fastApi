@@ -10,8 +10,8 @@ engine = create_engine(
     pool_pre_ping=True,           # evita conexiones zombies
     pool_recycle=1800,            # < wait_timeout del server
     pool_size=10,
-    max_overflow=20,
-    connect_args={"charset": "utf8mb4"}
+    max_overflow=20
+
 )
 
 # Session maker síncrono
