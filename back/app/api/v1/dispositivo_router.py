@@ -16,8 +16,7 @@ from app.repositories.cliente_repository import ClienteRepository # Necesario pa
 router = APIRouter()
 pending_commands = {}
 
-# --- ⭐ CAMBIO 1: Modificar el modelo de la petición ---
-# Añadimos id_huella para que el comando lo contenga.
+
 class ComandoRequest(BaseModel):
     comando: str
     cliente_id: Optional[int] = None
