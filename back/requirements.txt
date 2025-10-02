@@ -1,14 +1,29 @@
+# --- Core FastAPI ---
 fastapi
 uvicorn[standard]
+
+# --- DB/ORM/Config ---
 sqlalchemy
 pymysql
-python-dotenv
 alembic
+python-dotenv
 pydantic
 pydantic-settings>=2.3.4
 pydantic[email]
+
+# --- Auth ---
 python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
+
+# --- Utilidades varias ---
 opencv-python-headless
 numpy
+
+# --- TTS ---
+pydub
+
+# (Opcional) ffmpeg-python  # wrapper de ffmpeg si luego haces más procesamiento
+
+# --- MQTT ---
+paho-mqtt
