@@ -1,59 +1,58 @@
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
-from typing import Optional
+# app/api/v1/dispositivo_mqtt_router.py
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
+from typing import Optional, Any, Dict
+from app.mqtt_client import mqtt_client, topic_state, topic_config
 
-from sqlalchemy.orm import Session
-from app.db.session import get_db
-from app.services.cliente_service import ClienteService
-from app.repositories.cliente_repository import ClienteRepository
+router = APIRouter(prefix="/dispositivos", tags=["Dispositivos (MQTT)"])
 
-# --- ¡IMPORTANTE! Importamos nuestro cliente MQTT ---
-# La ruta "app.mqtt_client" funciona porque FastAPI corre desde el directorio raíz.
-from app.mqtt_client import mqtt_client
+# --------- Schemas ----------
+class CommandIn(BaseModel):
+    action: str = Field(..., examples=["open_door", "set_led"])
+    payload: Optional[Dict[str, Any]] = Field(default=None, examples=[{"timeout_ms": 3500}])
+    timeout: float = 5.0
 
-router = APIRouter()
+class StateIn(BaseModel):
+    data: Dict[str, Any] = Field(..., examples=[{"online": True}])
+    retain: bool = True
 
-# El modelo de la petición es el mismo que ya usabas.
-class ComandoRequest(BaseModel):
-    comando: str
-    cliente_id: Optional[int] = None
+class ConfigIn(BaseModel):
+    data: Dict[str, Any] = Field(..., examples=[{"finger_scan_mode": "manual_trigger"}])
+    retain: bool = True
 
-# ==============================================================================
-# ENDPOINT DEDICADO PARA PUBLICAR COMANDOS VÍA MQTT
-# ==============================================================================
-# Usamos una URL ligeramente diferente para evitar conflictos.
-@router.post("/comando_mqtt/{device_id}")
-async def enviar_comando_via_mqtt(device_id: int, request: ComandoRequest, db: Session = Depends(get_db)):
-    """
-    Recibe un comando desde el panel de administración, procesa la lógica
-    de negocio y lo publica inmediatamente en el topic MQTT del dispositivo.
-    """
-    comando_final = request.dict()
+# --------- Endpoints ----------
 
-    # --- Tu lógica de negocio para 'update' se mantiene intacta ---
-    if request.comando == "update" and request.cliente_id:
-        service = ClienteService()
-        cliente = service.get_by_id(db, request.cliente_id)
-        
-        if not cliente:
-            raise HTTPException(status_code=404, detail="Cliente no encontrado para el comando 'update'")
-        
-        huella_id_para_sensor = cliente.id_huella
-        if not huella_id_para_sensor:
-            repo = ClienteRepository()
-            next_id = repo.find_next_available_huella_id(db)
-            cliente.id_huella = next_id
-            db.commit()
-            db.refresh(cliente)
-            huella_id_para_sensor = cliente.id_huella
-        
-        comando_final['id_huella'] = huella_id_para_sensor
-    
-    # --- ⭐ Publicar el comando vía MQTT ---
-    topic = f"dispositivo/{device_id}/comandos"
-    success = mqtt_client.publish(topic, comando_final)
-    
-    if success:
-        return {"mensaje": f"Comando '{request.comando}' enviado exitosamente al dispositivo {device_id} vía MQTT."}
-    else:
-        raise HTTPException(status_code=500, detail="Error al enviar el comando. El servicio de mensajería (MQTT) podría no estar disponible.")
+@router.post("/{sede}/{device}/cmd")
+def send_command(sede: str, device: str, body: CommandIn):
+    try:
+        ok = mqtt_client.send_command_and_wait_ack(
+            sede=sede,
+            device=device,
+            action=body.action,
+            payload=body.payload,
+            timeout=body.timeout
+        )
+        return {"ok": ok}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"MQTT error: {e}")
+
+@router.post("/{sede}/{device}/state")
+def publish_state(sede: str, device: str, body: StateIn):
+    topic = topic_state(sede, device)
+    ok = mqtt_client.publish_json(topic, body.data, qos=1, retain=body.retain)
+    if not ok:
+        raise HTTPException(status_code=502, detail="No se pudo publicar state")
+    return {"ok": True}
+
+@router.post("/{sede}/{device}/config")
+def publish_config(sede: str, device: str, body: ConfigIn):
+    topic = topic_config(sede, device)
+    ok = mqtt_client.publish_json(topic, body.data, qos=1, retain=body.retain)
+    if not ok:
+        raise HTTPException(status_code=502, detail="No se pudo publicar config")
+    return {"ok": True}
+
+@router.post("/{sede}/{device}/ping")
+def ping_device(sede: str, device: str):
+    ok = mqtt_client.send_command_and_wait_ack(sede, device, "open_door", {"timeout_ms": 1000}, timeout=3.0)
+    return {"ok": ok}
