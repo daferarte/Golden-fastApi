@@ -43,9 +43,9 @@ class AccesoService:
         membresia_info = venta_activa.membresia
 
         # ================================
-        # 🔹 3. Verificar vigencia de la membresía
+        # 🔹 3. Verificar vigencia de la membresía (corregido)
         # ================================
-        if venta_activa.fecha_fin and venta_activa.fecha_fin < datetime.now().date():
+        if venta_activa.fecha_fin and venta_activa.fecha_fin.date() < datetime.now().date():
             return {
                 "permitido": False,
                 "mensaje": f"Acceso denegado. La membresía de {cliente.nombre} ha expirado."
