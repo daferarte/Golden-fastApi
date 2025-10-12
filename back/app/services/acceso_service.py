@@ -65,7 +65,7 @@ class AccesoService:
         # ================================
         # 🔹 5. Verificar si es membresía tipo “tiquetera”
         # ================================
-        es_tiquetera = "tiquetera" in membresia_info.nombre.lower()
+        es_tiquetera = "tiquetera" in membresia_info.nombre_membresia.lower()
 
         if es_tiquetera:
             # Verificar sesiones disponibles
@@ -104,7 +104,7 @@ class AccesoService:
         return {
             "permitido": True,
             "mensaje": f"¡Bienvenido, {cliente.nombre}!",
-            "tipo_membresia": membresia_info.nombre,
+            "tipo_membresia": membresia_info.nombre_membresia,
             "tiquetera": es_tiquetera,
             "sesiones_restantes": venta_activa.sesiones_restantes if es_tiquetera else None
         }
