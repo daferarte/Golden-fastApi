@@ -1,4 +1,7 @@
 # app/main.py
+from dotenv import load_dotenv
+load_dotenv()  # ✅ Cargar .env ANTES de importar mqtt_client
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -10,7 +13,7 @@ from app.core.config import settings
 from app.db.base import Base
 from app.db.session import engine
 
-# --- MQTT ---
+# --- MQTT (importar después de load_dotenv) ---
 from app.mqtt_client import mqtt_client
 
 # ======================
@@ -41,15 +44,13 @@ def get_application() -> FastAPI:
     # --- Routers ---
     app.include_router(api_router, prefix=settings.API_V1_STR)
 
-    # --- Rutas de salud básicas ---
+    # --- Endpoints de salud ---
     @app.get("/health", tags=["Health"])
     def health():
         return {"status": "ok"}
 
     @app.get("/health/mqtt", tags=["Health"])
     def health_mqtt():
-        # Nota: esto solo indica si la sesión cree estar conectada.
-        # Si necesitas un check profundo, puedes publicar a un topic de eco y esperar respuesta.
         return {"mqtt_connected": True if mqtt_client._connected.is_set() else False}
 
     return app
@@ -72,13 +73,10 @@ def on_startup():
     logging.getLogger("uvicorn").info(f"MEDIA_ROOT -> {MEDIA_ROOT}")
     if getattr(settings, "ENVIRONMENT", "development") == "development":
         init_models()
-
-    # Conexión MQTT con manejo de errores (no bloquear API)
     try:
         print("🚀 Conectando al broker MQTT...")
         mqtt_client.connect()
     except Exception as e:
-        # No frenar el arranque: loguear y continuar para que la API quede viva.
         logging.getLogger("uvicorn.error").exception(f"❌ No se pudo conectar a MQTT en startup: {e}")
 
 @app.on_event("shutdown")

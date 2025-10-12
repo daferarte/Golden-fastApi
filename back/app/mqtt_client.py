@@ -1,11 +1,11 @@
 import os, json, time, uuid, threading
 import paho.mqtt.client as mqtt
 
-# --- Configuración del Broker MQTT (por entorno) ---
-MQTT_BROKER_IP = os.getenv("MQTT_BROKER_IP", "192.168.0.100")
-MQTT_PORT      = int(os.getenv("MQTT_PORT", "1883"))
-MQTT_USER      = os.getenv("MQTT_USER", "")         # ej. "backend"
-MQTT_PASS      = os.getenv("MQTT_PASS", "")         # ej. "backendpass"
+# --- Configuración del Broker MQTT ---
+MQTT_BROKER_IPS = [ip.strip() for ip in os.getenv("MQTT_BROKER_IPS", "192.168.0.100").split(",")]
+MQTT_PORT = int(os.getenv("MQTT_PORT", 1883))
+MQTT_USER = os.getenv("MQTT_USER", "")
+MQTT_PASS = os.getenv("MQTT_PASS", "")
 MQTT_TLS       = os.getenv("MQTT_TLS", "false").lower() in ("1","true","yes")
 
 # Helpers de topics
@@ -56,7 +56,15 @@ class MQTTClient:
     # ------------------ Ciclo de vida ------------------
 
     def on_connect(self, client, userdata, flags, reason_code, properties):
-        if int(reason_code) == 0:
+        # En Paho v2, reason_code es un ReasonCode (no un int)
+        rc = getattr(reason_code, "value", reason_code)  # si es int en v1, se queda igual
+        try:
+            ok = int(rc) == 0
+        except Exception:
+            # Fallback por si el objeto expone is_good() en esta versión
+            ok = getattr(reason_code, "is_good", lambda: False)()
+
+        if ok:
             print("✅ Conectado exitosamente al Broker MQTT!")
             self._connected.set()
             # Re-suscribir lo que ya teníamos
@@ -64,11 +72,16 @@ class MQTTClient:
                 for t in list(self._subs):
                     self.client.subscribe(t, qos=1)
         else:
-            print(f"❌ Falló la conexión al Broker MQTT, código: {reason_code}")
+            # Opcional: nombre legible del código
+            name = getattr(reason_code, "name", str(reason_code))
+            print(f"❌ Falló la conexión al Broker MQTT, code={rc} ({name})")
 
     def on_disconnect(self, client, userdata, reason_code, properties):
-        print(f"🔌 Desconectado del Broker MQTT (rc={reason_code})")
+        rc = getattr(reason_code, "value", reason_code)
+        name = getattr(reason_code, "name", str(reason_code))
+        print(f"🔌 Desconectado del Broker MQTT (rc={rc}, {name})")
         self._connected.clear()
+
 
     def on_message(self, client, userdata, msg):
         # Procesa ACKs: payload JSON con {"id": "...", "ok": true/false, ...}
@@ -87,19 +100,22 @@ class MQTTClient:
                     pending["event"].set()
 
     def connect(self, retries=999):
-        """Conexión con reintentos y backoff; arranca loop de red."""
         backoff = 1.0
         for _ in range(retries):
-            try:
-                self.client.connect(MQTT_BROKER_IP, MQTT_PORT, keepalive=30)
-                self.client.loop_start()  # maneja red en segundo plano
-                if self._connected.wait(timeout=5.0):
-                    return
-            except Exception as e:
-                print(f"🔥 Error al conectar con MQTT: {e}")
+            for host in MQTT_BROKER_IPS:
+                try:
+                    print(f"🔗 Intentando conectar a broker {host}:{MQTT_PORT} ...")
+                    if MQTT_USER:
+                        self.client.username_pw_set(MQTT_USER, MQTT_PASS)
+                    self.client.connect(host, MQTT_PORT, keepalive=30)
+                    self.client.loop_start()
+                    return  # si conecta, salimos
+                except Exception as e:
+                    print(f"⚠️ Error conectando a {host}:{MQTT_PORT} -> {e}")
             time.sleep(backoff)
             backoff = min(backoff * 1.7, 10.0)
-        raise RuntimeError("No se pudo conectar al broker MQTT")
+        raise RuntimeError("No se pudo conectar a ningún broker MQTT")
+
 
     def disconnect(self):
         """Detiene loop y desconecta."""
