@@ -7,7 +7,7 @@ from app.repositories.asistencia_repository import AsistenciaRepository
 from app.models.asistencia import Asistencia
 from fastapi import HTTPException
 from typing import Literal
-
+from app.utils.notifier import notificar_asistencia
 
 class AccesoService:
     def __init__(self):
@@ -43,7 +43,7 @@ class AccesoService:
         membresia_info = venta_activa.membresia
 
         # ================================
-        # 🔹 3. Verificar vigencia de la membresía (corregido)
+        # 🔹 3. Verificar vigencia de la membresía
         # ================================
         if venta_activa.fecha_fin and venta_activa.fecha_fin.date() < datetime.now().date():
             return {
@@ -63,17 +63,14 @@ class AccesoService:
                 }
 
         # ================================
-        # 🔹 5. Verificar si es membresía tipo “tiquetera”
+        # 🔹 5. Verificar membresía tipo “tiquetera”
         # ================================
         es_tiquetera = "tiquetera" in membresia_info.nombre_membresia.lower()
-
-        if es_tiquetera:
-            # Verificar sesiones disponibles
-            if venta_activa.sesiones_restantes is None or venta_activa.sesiones_restantes <= 0:
-                return {
-                    "permitido": False,
-                    "mensaje": f"Acceso denegado. {cliente.nombre} no tiene sesiones disponibles."
-                }
+        if es_tiquetera and (venta_activa.sesiones_restantes is None or venta_activa.sesiones_restantes <= 0):
+            return {
+                "permitido": False,
+                "mensaje": f"Acceso denegado. {cliente.nombre} no tiene sesiones disponibles."
+            }
 
         # ================================
         # 🔹 6. Registrar asistencia
@@ -86,17 +83,24 @@ class AccesoService:
             tipo_acceso=tipo_acceso,
         )
         db.add(nueva_asistencia)
+        db.flush()  # Importante: asigna ID y relaciones antes del commit
 
         # ================================
-        # 🔹 7. Restar sesión solo si es tiquetera
+        # 🔹 7. Restar sesión si aplica
         # ================================
         if es_tiquetera and venta_activa.sesiones_restantes is not None:
             venta_activa.sesiones_restantes -= 1
 
         # ================================
-        # 🔹 8. Guardar cambios en BD
+        # 🔹 8. Guardar y notificar
         # ================================
         db.commit()
+        db.refresh(nueva_asistencia)
+
+        try:
+            notificar_asistencia(nueva_asistencia)
+        except Exception as e:
+            print(f"⚠️ No se pudo notificar asistencia vía MQTT: {e}")
 
         # ================================
         # 🔹 9. Respuesta final
@@ -106,5 +110,5 @@ class AccesoService:
             "mensaje": f"¡Bienvenido, {cliente.nombre}!",
             "tipo_membresia": membresia_info.nombre_membresia,
             "tiquetera": es_tiquetera,
-            "sesiones_restantes": venta_activa.sesiones_restantes if es_tiquetera else None
+            "sesiones_restantes": venta_activa.sesiones_restantes if es_tiquetera else None,
         }
