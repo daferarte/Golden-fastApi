@@ -4,7 +4,7 @@ from app.api.v1 import (
     cliente, sedes, membresias, ventas_membresias, asistencias,
     facturas, detalles_facturas, usuarios, roles, tipos_descuento,
     reportes_asistencia, acceso, dispositivo_router,
-    uploads, reportes, tts, dispositivo_mqtt_router
+    uploads, reportes, tts, dispositivo_mqtt_router, ws_events
 )
 
 api_router = APIRouter()
@@ -26,6 +26,7 @@ api_router.include_router(tipos_descuento.router, prefix="/tipos-descuento", tag
 api_router.include_router(reportes_asistencia.router, prefix="/reportes-asistencia", tags=["Reportes Asistencia"])
 api_router.include_router(tts.router, prefix="/tts", tags=["TTS"])
 api_router.include_router(reportes.router)
+api_router.include_router(ws_events.router)
 
 # Router MQTT (SIN prefijo extra, ya define /dispositivos)
 api_router.include_router(dispositivo_mqtt_router.router)
