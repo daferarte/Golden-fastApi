@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from datetime import datetime, date
 from fastapi import HTTPException
 from typing import Literal
+from threading import Thread
+
 from app.models.asistencia import Asistencia
 from app.repositories.cliente_repository import ClienteRepository
 from app.repositories.venta_membresia_repository import VentaMembresiaRepository
@@ -16,9 +18,9 @@ class AccesoService:
         self.venta_repo = VentaMembresiaRepository()
         self.asistencia_repo = AsistenciaRepository()
 
-    # ============================================================
-    # 🔹 Método auxiliar centralizado para registrar el evento
-    # ============================================================
+    # -----------------------------------------------------
+    # 🔸 Método interno: registra evento y dispara notificación
+    # -----------------------------------------------------
     def _registrar_evento(
         self,
         db: Session,
@@ -29,13 +31,7 @@ class AccesoService:
         id_venta: int | None = None,
         id_sede: int = 1,
         extra_data: dict | None = None,
-    ):
-        """
-        Registra en la base de datos un evento de asistencia:
-        - permitido=True → acceso exitoso.
-        - permitido=False → intento fallido con motivo_error.
-        También emite una notificación enriquecida.
-        """
+    ) -> Asistencia:
         nueva_asistencia = Asistencia(
             id_cliente=cliente.id,
             id_venta=id_venta,
@@ -45,12 +41,9 @@ class AccesoService:
             motivo_error=None if permitido else mensaje,
         )
         db.add(nueva_asistencia)
-        db.commit()
-        db.refresh(nueva_asistencia)
+        db.flush()  # Asigna el ID sin hacer commit
 
-        # ============================================================
-        # 🔔 Construir payload de notificación enriquecido
-        # ============================================================
+        # 🔔 Payload enriquecido
         payload = {
             "permitido": permitido,
             "mensaje": mensaje,
@@ -61,21 +54,17 @@ class AccesoService:
             "hora": nueva_asistencia.fecha_hora_entrada.strftime("%H:%M:%S"),
             "tipo_acceso": tipo_acceso,
         }
-
-        # Si hay datos extra (membresía, sesiones, vencimiento, etc.)
         if extra_data:
             payload.update(extra_data)
 
-        try:
-            notificar_asistencia(payload)
-        except Exception as e:
-            print(f"⚠️ No se pudo notificar asistencia vía MQTT: {e}")
+        # 🔸 Lanzar notificación en hilo aparte (no bloqueante)
+        Thread(target=lambda: notificar_asistencia(payload)).start()
 
         return nueva_asistencia
 
-    # ============================================================
-    # 🔹 Lógica principal de verificación de acceso
-    # ============================================================
+    # -----------------------------------------------------
+    # 🔹 Lógica principal
+    # -----------------------------------------------------
     def verificar_acceso(
         self,
         db: Session,
@@ -84,112 +73,88 @@ class AccesoService:
         tipo_acceso: Literal["huella", "documento"] = "huella",
         id_sede: int = 1,
     ) -> dict:
-        # --- Validar existencia del cliente ---
+        # 1️⃣ Buscar cliente
         cliente = self.cliente_repo.get_by_id(db, id_value=cliente_id)
         if not cliente:
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
 
-        # --- Buscar membresía activa ---
-        venta_activa = self.venta_repo.find_active_for_client(db, cliente.id)
-        if not venta_activa:
-            mensaje = f"Acceso denegado. {cliente.nombre} no tiene una membresía activa."
-            self._registrar_evento(db, cliente, False, mensaje, tipo_acceso)
-            return {"permitido": False, "mensaje": mensaje}
+        # 2️⃣ Buscar membresía activa
+        venta = self.venta_repo.find_active_for_client(db, cliente.id)
+        if not venta:
+            msg = f"{cliente.nombre} no tiene una membresía activa."
+            self._registrar_evento(db, cliente, False, msg, tipo_acceso)
+            db.commit()
+            return {"permitido": False, "mensaje": f"Acceso denegado. {msg}"}
 
-        membresia_info = venta_activa.membresia
-        es_tiquetera = "tiquetera" in membresia_info.nombre_membresia.lower()
+        m = venta.membresia
+        es_tiquetera = "tiquetera" in m.nombre_membresia.lower()
+        dias_restantes = (
+            (venta.fecha_fin.date() - date.today()).days if venta.fecha_fin else None
+        )
 
-        # --- Días restantes ---
-        dias_restantes = None
-        if venta_activa.fecha_fin:
-            dias_restantes = (venta_activa.fecha_fin.date() - date.today()).days
+        # 3️⃣ Validaciones
+        motivos_error = []
+        if venta.fecha_fin and venta.fecha_fin.date() < date.today():
+            motivos_error.append("La membresía ha expirado.")
+        if m.max_accesos_diarios and (
+            self.asistencia_repo.count_today_for_client(db, cliente.id)
+            >= m.max_accesos_diarios
+        ):
+            motivos_error.append("Ha excedido los accesos diarios permitidos.")
+        if es_tiquetera and (
+            not venta.sesiones_restantes or venta.sesiones_restantes <= 0
+        ):
+            motivos_error.append("No tiene sesiones disponibles.")
 
-        # --- Verificar vigencia ---
-        if venta_activa.fecha_fin and venta_activa.fecha_fin.date() < datetime.now().date():
-            mensaje = f"Acceso denegado. La membresía de {cliente.nombre} ha expirado."
+        # 4️⃣ Si hay errores → registrar intento fallido
+        if motivos_error:
+            msg = " ".join(motivos_error)
             self._registrar_evento(
                 db,
                 cliente,
                 False,
-                mensaje,
+                f"Acceso denegado. {msg}",
                 tipo_acceso,
-                venta_activa.id,
+                venta.id,
+                id_sede,
                 extra_data={
-                    "tipo_membresia": membresia_info.nombre_membresia,
-                    "sesiones_restantes": venta_activa.sesiones_restantes,
+                    "tipo_membresia": m.nombre_membresia,
+                    "sesiones_restantes": venta.sesiones_restantes,
                     "dias_restantes": dias_restantes,
                 },
             )
-            return {"permitido": False, "mensaje": mensaje}
+            db.commit()
+            return {"permitido": False, "mensaje": msg}
 
-        # --- Límite de accesos diarios ---
-        if membresia_info.max_accesos_diarios is not None:
-            accesos_hoy = self.asistencia_repo.count_today_for_client(db, cliente.id)
-            if accesos_hoy >= membresia_info.max_accesos_diarios:
-                mensaje = f"Acceso denegado. {cliente.nombre} ha excedido los accesos diarios permitidos."
-                self._registrar_evento(
-                    db,
-                    cliente,
-                    False,
-                    mensaje,
-                    tipo_acceso,
-                    venta_activa.id,
-                    extra_data={
-                        "tipo_membresia": membresia_info.nombre_membresia,
-                        "sesiones_restantes": venta_activa.sesiones_restantes,
-                        "dias_restantes": dias_restantes,
-                    },
-                )
-                return {"permitido": False, "mensaje": mensaje}
-
-        # --- Membresía tipo tiquetera ---
-        if es_tiquetera and (venta_activa.sesiones_restantes is None or venta_activa.sesiones_restantes <= 0):
-            mensaje = f"Acceso denegado. {cliente.nombre} no tiene sesiones disponibles."
-            self._registrar_evento(
-                db,
-                cliente,
-                False,
-                mensaje,
-                tipo_acceso,
-                venta_activa.id,
-                extra_data={
-                    "tipo_membresia": membresia_info.nombre_membresia,
-                    "sesiones_restantes": venta_activa.sesiones_restantes,
-                    "dias_restantes": dias_restantes,
-                },
-            )
-            return {"permitido": False, "mensaje": mensaje}
-
-        # ----------------------------------------------------------
-        # ✅ Si pasa todas las validaciones → acceso exitoso
-        # ----------------------------------------------------------
+        # 5️⃣ Registrar acceso exitoso
         nueva_asistencia = self._registrar_evento(
-            db=db,
-            cliente=cliente,
-            permitido=True,
-            mensaje=f"Acceso permitido para {cliente.nombre}",
-            tipo_acceso=tipo_acceso,
-            id_venta=venta_activa.id,
-            id_sede=id_sede,
+            db,
+            cliente,
+            True,
+            f"Acceso permitido para {cliente.nombre}",
+            tipo_acceso,
+            venta.id,
+            id_sede,
             extra_data={
-                "tipo_membresia": membresia_info.nombre_membresia,
-                "sesiones_restantes": venta_activa.sesiones_restantes,
+                "tipo_membresia": m.nombre_membresia,
+                "sesiones_restantes": venta.sesiones_restantes,
                 "dias_restantes": dias_restantes,
             },
         )
 
-        # --- Restar sesión si aplica ---
-        if es_tiquetera and venta_activa.sesiones_restantes is not None:
-            venta_activa.sesiones_restantes -= 1
-            db.commit()
+        # 6️⃣ Actualizar sesiones (solo si tiquetera)
+        if es_tiquetera and venta.sesiones_restantes is not None:
+            venta.sesiones_restantes -= 1
 
-        # --- Respuesta final ---
+        # ✅ Un solo commit al final
+        db.commit()
+
         return {
             "permitido": True,
             "mensaje": f"¡Bienvenido, {cliente.nombre}!",
-            "tipo_membresia": membresia_info.nombre_membresia,
+            "tipo_membresia": m.nombre_membresia,
             "tiquetera": es_tiquetera,
-            "sesiones_restantes": venta_activa.sesiones_restantes if es_tiquetera else None,
+            "sesiones_restantes": venta.sesiones_restantes if es_tiquetera else None,
             "dias_restantes": dias_restantes,
             "asistencia_id": nueva_asistencia.id,
         }
