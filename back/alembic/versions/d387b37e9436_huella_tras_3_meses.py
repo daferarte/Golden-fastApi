@@ -3,13 +3,11 @@
 Revision ID: d387b37e9436
 Revises: 752fb6684e29
 Create Date: 2025-09-01 16:26:16.554336
-
 """
-from typing import Sequence, Union
 
+from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
-
 
 # revision identifiers, used by Alembic.
 revision: str = 'd387b37e9436'
@@ -21,7 +19,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     conn = op.get_bind()
     with op.get_context().autocommit_block():
-        # 1) Log para el informe (sin guardar plantilla biométrica)
+        # 1️⃣ Crear tabla de log si no existe
         conn.exec_driver_sql("""
         CREATE TABLE IF NOT EXISTS huella_purgada_log (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -42,7 +40,12 @@ def upgrade() -> None:
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
         """)
 
-        # 2) SP: purga biometría si la ÚLTIMA membresía terminó hace ≥ 3 meses
+        # 2️⃣ Eliminar versiones previas antes de crear nuevas
+        conn.exec_driver_sql("DROP EVENT IF EXISTS ev_purgar_huellas_vencido_3m;")
+        conn.exec_driver_sql("DROP PROCEDURE IF EXISTS sp_purgar_huellas_por_vencimiento_3m;")
+        conn.exec_driver_sql("DROP PROCEDURE IF EXISTS sp_reporte_huellas_purgadas;")
+
+        # 3️⃣ Procedimiento principal
         conn.exec_driver_sql("""
         CREATE PROCEDURE sp_purgar_huellas_por_vencimiento_3m()
         BEGIN
@@ -95,16 +98,16 @@ def upgrade() -> None:
         END
         """)
 
-        # 3) Evento diario a las 09:20 AM (no choca con el de vencidos a las 01:10)
+        # 4️⃣ Evento programado diario (09:20 AM)
         conn.exec_driver_sql("""
-        CREATE EVENT IF NOT EXISTS ev_purgar_huellas_vencido_3m
+        CREATE EVENT ev_purgar_huellas_vencido_3m
         ON SCHEDULE EVERY 1 DAY
         STARTS (TIMESTAMP(CURDATE(), '09:20:00'))
         DO
           CALL sp_purgar_huellas_por_vencimiento_3m();
         """)
 
-        # 4) Vista de informe
+        # 5️⃣ Vista de informe
         conn.exec_driver_sql("""
         CREATE OR REPLACE VIEW vw_informe_huellas_purgadas AS
         SELECT
@@ -114,7 +117,7 @@ def upgrade() -> None:
         FROM huella_purgada_log;
         """)
 
-        # 5) (Opcional) SP de reporte por rango
+        # 6️⃣ Procedimiento de reporte
         conn.exec_driver_sql("""
         CREATE PROCEDURE sp_reporte_huellas_purgadas(IN p_desde DATETIME, IN p_hasta DATETIME)
         BEGIN

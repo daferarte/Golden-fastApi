@@ -3,13 +3,11 @@
 Revision ID: 752fb6684e29
 Revises: 98a892b80664
 Create Date: 2025-09-01 16:24:17.671735
-
 """
-from typing import Sequence, Union
 
+from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
-
 
 # revision identifiers, used by Alembic.
 revision: str = '752fb6684e29'
@@ -20,8 +18,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     conn = op.get_bind()
+
     # Algunos motores requieren autocommit para CREATE PROCEDURE/EVENT
     with op.get_context().autocommit_block():
+        # 🔹 Asegurar que no exista antes de crearla
+        conn.exec_driver_sql("DROP PROCEDURE IF EXISTS sp_marcar_membresias_vencidas;")
+
         # 1) Procedimiento: marca como VENCIDO cuando la fecha_fin ya pasó
         conn.exec_driver_sql("""
         CREATE PROCEDURE sp_marcar_membresias_vencidas()
@@ -34,9 +36,12 @@ def upgrade() -> None:
         END
         """)
 
-        # 2) Evento DIARIO: corre a la 01:10 AM hora del servidor
+        # 🔹 Asegurar que no haya evento previo duplicado
+        conn.exec_driver_sql("DROP EVENT IF EXISTS ev_marcar_vencidos_diario;")
+
+        # 2) Evento DIARIO: corre a la 03:10 AM hora del servidor
         conn.exec_driver_sql("""
-        CREATE EVENT IF NOT EXISTS ev_marcar_vencidos_diario
+        CREATE EVENT ev_marcar_vencidos_diario
         ON SCHEDULE EVERY 1 DAY
         STARTS (TIMESTAMP(CURDATE(), '03:10:00'))
         DO
