@@ -4,6 +4,7 @@ load_dotenv()  # ✅ Cargar .env antes de todo (MQTT, DB, etc.)
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import logging
@@ -39,6 +40,9 @@ def get_application() -> FastAPI:
         title=settings.PROJECT_NAME,
         version="1.0.0"
     )
+
+    # --- GZip Compression (Optimización) ---
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
 
     # --- CORS ---
     app.add_middleware(
@@ -107,10 +111,6 @@ def on_startup():
 
     if getattr(settings, "ENVIRONMENT", "development") == "development":
         init_models()
-
-    # 🔸 Pequeño retraso para asegurar que el broker esté disponible
-    print("⏳ Esperando 2s antes de conectar al broker MQTT...")
-    time.sleep(2)
 
     try:
         print("🚀 Conectando al broker MQTT...")
