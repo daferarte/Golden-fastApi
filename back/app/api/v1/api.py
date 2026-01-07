@@ -5,7 +5,7 @@ from app.api.v1 import (
     facturas, detalles_facturas, usuarios, roles, tipos_descuento,
     reportes_asistencia, acceso, dispositivo_router,
     uploads, reportes, tts, dispositivo_mqtt_router, ws_events,
-    auth # <-- Nuevo import
+    auth, luces # <-- Nuevo import
 )
 
 api_router = APIRouter()
@@ -14,6 +14,7 @@ api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["Autenticación"])
 
 # Routers de negocio
+api_router.include_router(luces.router, prefix="/config", tags=["Configuración IoT"])
 api_router.include_router(dispositivo_router.router, prefix="/dispositivo", tags=["Control Dispositivo"])
 api_router.include_router(acceso.router, prefix="/acceso", tags=["Control de Acceso"])
 api_router.include_router(uploads.router, prefix="/uploads", tags=["Uploads"])

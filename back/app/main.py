@@ -10,6 +10,8 @@ from pathlib import Path
 import logging
 import asyncio
 import time
+import os
+import json
 
 from app.api.v1.api import api_router
 from app.core.config import settings
@@ -117,6 +119,22 @@ def on_startup():
         mqtt_client.connect()
         mqtt_client.ensure_sub("devices/pasto/gym/event")
         print("✅ Suscrito al topic devices/pasto/gym/event")
+
+        # Restaurar Estado de Luces (Configuración Dinámica)
+        if os.path.exists("data/led_config.json"):
+            try:
+                with open("data/led_config.json", "r") as f:
+                    data = json.load(f)
+                    # Iteramos por cada dispositivo configurado (key = "sede/device")
+                    for key_device, payload in data.items():
+                        if isinstance(payload, dict):
+                            topic = f"devices/{key_device}/cmd"
+                            # Envolvemos como comando 'set_led'
+                            cmd_payload = {"action": "set_led", **payload}
+                            mqtt_client.publish_json(topic, cmd_payload, retain=False)
+                            print(f"💡 Restaurado via cmd [{topic}]: {cmd_payload}")
+            except Exception as e:
+                print(f"⚠️ Error restaurando luces: {e}")
     except Exception as e:
         logging.getLogger("uvicorn.error").exception(
             f"❌ No se pudo conectar a MQTT en startup: {e}"
