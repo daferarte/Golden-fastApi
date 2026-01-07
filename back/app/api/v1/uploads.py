@@ -15,7 +15,11 @@ FOTOS_DIR = MEDIA_ROOT / "fotos"
 FOTOS_DIR.mkdir(parents=True, exist_ok=True)
 
 @router.post("/upload-foto")
-async def upload_foto(documento: str = Form(...), file: UploadFile = File(...)):
+async def upload_foto(
+    documento: str = Form(...),
+    file: UploadFile = File(...),
+    current_user=Depends(deps.get_current_active_user),
+):
     # Validar doc y tipo
     safe_doc = re.sub(r"[^a-zA-Z0-9_\-]", "", documento)
     if not safe_doc:
