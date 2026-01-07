@@ -10,6 +10,7 @@ from app.repositories.cliente_repository import ClienteRepository
 from typing import Optional, Dict
 from app.schemas.common import Page
 from app.schemas.membresia_resumen import ResumenMembresia
+from app.api import deps
 
 # ⬇️ NUEVOS IMPORTS para el resumen con filtros
 from sqlalchemy import func, case, and_, or_
@@ -27,6 +28,10 @@ from app.services.cliente_membresia_service import crear_cliente_y_venta, update
 router = APIRouter()
 service = ClienteService()
 
+# Definimos permisos (ejemplo: solo dueños/admin borran clientes)
+permitir_solo_duenos = deps.RoleChecker(["dueño"])
+permitir_staff = deps.get_current_active_user # Cualquier usuario logueado activo
+
 # Campos permitidos para ordenamiento (clave pública -> atributo en el modelo)
 SORT_FIELDS: Dict[str, str] = {
     "id": "id",
@@ -41,7 +46,7 @@ class HuellaRequest(BaseModel):
     huella_base64: str
 
 
-@router.post("/", response_model=ClienteResponse)
+@router.post("/", response_model=ClienteResponse, dependencies=[Depends(permitir_staff)])
 def create_cliente(data: ClienteCreateRequest, db: Session = Depends(get_db)):
     huella_bytes = None
     if data.huella_template:
@@ -58,7 +63,7 @@ def create_cliente(data: ClienteCreateRequest, db: Session = Depends(get_db)):
     return service.create(db, cliente_a_crear)
 
 
-@router.get("/", response_model=Page[ClienteResponse])
+@router.get("/", response_model=Page[ClienteResponse], dependencies=[Depends(permitir_staff)])
 def list_clientes(
     request: Request,
     db: Session = Depends(get_db),
@@ -98,21 +103,21 @@ def list_clientes(
     )
 
 
-@router.get("/{cliente_id}", response_model=ClienteResponse)
+@router.get("/{cliente_id}", response_model=ClienteResponse, dependencies=[Depends(permitir_staff)])
 def get_cliente(cliente_id: int, db: Session = Depends(get_db)):
     cliente = service.get_by_id(db, cliente_id)
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     return cliente
 
-@router.put("/{cliente_id}", response_model=ClienteResponse)
+@router.put("/{cliente_id}", response_model=ClienteResponse, dependencies=[Depends(permitir_staff)])
 def update_cliente(cliente_id: int, data: ClienteUpdate, db: Session = Depends(get_db)):
     updated = service.update(db, cliente_id, data)
     if not updated:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     return updated
 
-@router.delete("/{cliente_id}")
+@router.delete("/{cliente_id}", dependencies=[Depends(permitir_solo_duenos)])
 def delete_cliente(cliente_id: int, db: Session = Depends(get_db)):
     deleted = service.delete(db, cliente_id)
     if not deleted:
@@ -120,7 +125,7 @@ def delete_cliente(cliente_id: int, db: Session = Depends(get_db)):
     return {"message": "Cliente eliminado correctamente"}
 
 # --- Endpoint de Actualización de Huella Ajustado ---
-@router.put("/{cliente_id}/huella", response_model=ClienteResponse)
+@router.put("/{cliente_id}/huella", response_model=ClienteResponse, dependencies=[Depends(permitir_staff)])
 def actualizar_huella_cliente(cliente_id: int, request: HuellaRequest, db: Session = Depends(get_db)):
     """
     Actualiza la plantilla de la huella para un cliente existente.
@@ -135,7 +140,7 @@ def actualizar_huella_cliente(cliente_id: int, request: HuellaRequest, db: Sessi
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     return cliente_actualizado
 
-@router.get("/by-huella/{id_huella}", response_model=ClienteResponse)
+@router.get("/by-huella/{id_huella}", response_model=ClienteResponse, dependencies=[Depends(permitir_staff)])
 def get_cliente_by_huella(id_huella: int, db: Session = Depends(get_db)):
     """
     Busca y devuelve los datos de un cliente usando su id_huella.
@@ -146,7 +151,7 @@ def get_cliente_by_huella(id_huella: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Cliente con esa huella no fue encontrado")
     return cliente
 
-@router.get("/{cliente_id}/membresia-actual", response_model=ResumenMembresia)
+@router.get("/{cliente_id}/membresia-actual", response_model=ResumenMembresia, dependencies=[Depends(permitir_staff)])
 def obtener_membresia_actual(cliente_id: int, db: Session = Depends(get_db)):
     """
     Última venta de membresía para un cliente.
@@ -157,7 +162,7 @@ def obtener_membresia_actual(cliente_id: int, db: Session = Depends(get_db)):
     return resumen
 
 # =================== RESUMEN CON FILTROS EN BACKEND ===================
-@router.get("/membresias/resumen", response_model=Page[ResumenMembresia])
+@router.get("/membresias/resumen", response_model=Page[ResumenMembresia], dependencies=[Depends(permitir_staff)])
 def listar_resumen_membresias(
     request: Request,
     db: Session = Depends(get_db),
@@ -280,7 +285,7 @@ def listar_resumen_membresias(
 
 # =================== CREAR / ACTUALIZAR CLIENTE+VENTA ===================
 
-@router.post("/with-membresia", response_model=CrearClienteYVentaResponse, status_code=201)
+@router.post("/with-membresia", response_model=CrearClienteYVentaResponse, status_code=201, dependencies=[Depends(permitir_staff)])
 def crear_cliente_con_membresia(payload: CrearClienteYVentaRequest, db: Session = Depends(get_db)):
     return crear_cliente_y_venta(db, payload)
 
@@ -288,6 +293,7 @@ def crear_cliente_con_membresia(payload: CrearClienteYVentaRequest, db: Session 
 @router.put("/{cliente_id}/with-membresia",
     response_model=CrearClienteYVentaResponse,
     summary="Actualiza datos del cliente y su venta de membresía (parcial)",
+    dependencies=[Depends(permitir_staff)]
 )
 def actualizar_cliente_con_membresia(
     cliente_id: int,

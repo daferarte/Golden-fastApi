@@ -15,6 +15,7 @@ class ClienteIn(BaseModel):
     id_tipo_descuento: Optional[int] = None
     fotografia: Optional[str] = None  # si la envías como base64
     huella_base64: Optional[str] = None      # si la envías como base64
+    observaciones: Optional[str] = None
 
 class VentaMembresiaIn(BaseModel):
     id_membresia: int
@@ -35,6 +36,7 @@ class ClienteUpdateIn(BaseModel):
     direccion: Optional[str] = None
     # Si tu modelo 'fotografia' es ruta (string) puedes usar esto:
     fotografia: Optional[str] = None
+    observaciones: Optional[str] = None
 
 class VentaUpdateIn(BaseModel):
     # Si no pasas id, se tomará la venta más reciente del cliente (por fecha_inicio)
@@ -63,6 +65,7 @@ class ClienteOut(BaseModel):
     id_tipo_descuento: Optional[int] = None
     direccion: Optional[str] = None
     id_huella: Optional[int] = None
+    observaciones: Optional[str] = None
 
 class VentaMembresiaOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)

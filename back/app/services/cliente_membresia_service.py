@@ -96,6 +96,7 @@ def crear_cliente_y_venta(db: Session, payload: CrearClienteYVentaRequest) -> Cr
             id_tipo_descuento= payload.cliente.id_tipo_descuento,
             huella_template=huella_bytes or None,
             id_huella=id_huella,
+            observaciones=payload.cliente.observaciones,
         )
         db.add(cliente)
         db.flush()  # asigna cliente.id
@@ -165,10 +166,15 @@ def update_cliente_y_venta(
     try:
         # ---- Actualizar CLIENTE (parcial) ----
         c = payload.cliente
-        for field in ["nombre", "apellido", "documento", "fecha_nacimiento", "correo", "telefono", "direccion"]:
-            val = getattr(c, field, None)
-            if val is not None:
-                setattr(cliente, field, val)
+        # Usamos model_dump(exclude_unset=True) para obtener solo los campos enviados en el JSON
+        cliente_data = c.model_dump(exclude_unset=True)
+        
+        # Campos especiales que se manejan aparte o no deben ir directos a la DB
+        exclude_fields = {"fotografia", "huella_base64"}
+
+        for field, value in cliente_data.items():
+            if field not in exclude_fields and hasattr(cliente, field):
+                setattr(cliente, field, value)
 
         # Fotografía: ruta string (si tu columna es binaria, no asignes string aquí)
         if hasattr(c, "fotografia") and c.fotografia is not None:

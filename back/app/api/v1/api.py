@@ -4,10 +4,14 @@ from app.api.v1 import (
     cliente, sedes, membresias, ventas_membresias, asistencias,
     facturas, detalles_facturas, usuarios, roles, tipos_descuento,
     reportes_asistencia, acceso, dispositivo_router,
-    uploads, reportes, tts, dispositivo_mqtt_router, ws_events
+    uploads, reportes, tts, dispositivo_mqtt_router, ws_events,
+    auth # <-- Nuevo import
 )
 
 api_router = APIRouter()
+
+# Auth
+api_router.include_router(auth.router, prefix="/auth", tags=["Autenticación"])
 
 # Routers de negocio
 api_router.include_router(dispositivo_router.router, prefix="/dispositivo", tags=["Control Dispositivo"])

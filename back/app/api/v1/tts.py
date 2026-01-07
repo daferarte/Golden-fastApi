@@ -11,7 +11,11 @@ from fastapi.responses import (
     HTMLResponse,
 )
 
+from fastapi import Depends
+from app.api import deps
+
 router = APIRouter()
+
 
 # Detectar binarios disponibles (macOS: 'espeak', Linux: 'espeak-ng')
 ESPEAK_CMD = shutil.which("espeak-ng") or shutil.which("espeak")

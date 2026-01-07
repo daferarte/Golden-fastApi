@@ -11,10 +11,13 @@ from app.db.session import get_db
 from app.services.cliente_service import ClienteService
 
 from app.repositories.cliente_repository import ClienteRepository # Necesario para buscar el ID
-
+from app.api import deps
 
 router = APIRouter()
 pending_commands = {}
+
+permitir_solo_duenos = deps.RoleChecker(["dueño"])
+permitir_staff = deps.get_current_active_user
 
 
 class ComandoRequest(BaseModel):

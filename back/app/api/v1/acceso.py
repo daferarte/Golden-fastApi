@@ -7,6 +7,7 @@ from typing import Optional
 from app.db.session import get_db
 from app.services.acceso_service import AccesoService
 from app.repositories.cliente_repository import ClienteRepository
+from app.api import deps
 
 router = APIRouter()
 servicio_acceso = AccesoService()

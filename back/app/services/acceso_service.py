@@ -6,6 +6,7 @@ from typing import Literal
 from threading import Thread
 
 from app.models.asistencia import Asistencia
+from app.models.usuario import Usuario
 from app.repositories.cliente_repository import ClienteRepository
 from app.repositories.venta_membresia_repository import VentaMembresiaRepository
 from app.repositories.asistencia_repository import AsistenciaRepository
@@ -78,10 +79,36 @@ class AccesoService:
         if not cliente:
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
 
+        # 1.5️⃣ Verificar si es Usuario del Sistema (acceso ilimitado)
+        usuario_sistema = db.query(Usuario).filter(Usuario.id_cliente == cliente.id, Usuario.activo == True).first()
+        if usuario_sistema:
+             self._registrar_evento(
+                db,
+                cliente,
+                True,
+                f"Acceso ADMINISTRATIVO concedido",
+                tipo_acceso,
+                id_sede=id_sede,
+                extra_data={
+                    "tipo_membresia": "STAFF",
+                    "es_admin": True
+                }
+            )
+             db.commit()
+             return {
+                "permitido": True,
+                "mensaje": f"¡Hola Acceso Staff",
+                "tipo_membresia": "ADMINISTRATIVO",
+                "tiquetera": False,
+                "sesiones_restantes": None,
+                "dias_restantes": 9999,
+                "asistencia_id": 0, # O el id real si lo devolvemos
+            }
+
         # 2️⃣ Buscar membresía activa
         venta = self.venta_repo.find_active_for_client(db, cliente.id)
         if not venta:
-            msg = f"{cliente.nombre} no tiene una membresía activa."
+            msg = f"no tiene una membresía activa."
             self._registrar_evento(db, cliente, False, msg, tipo_acceso)
             db.commit()
             return {"permitido": False, "mensaje": f"Acceso denegado. {msg}"}

@@ -83,7 +83,7 @@ class ReportesService:
     def resumen_asistencias(self, db: Session) -> dict:
         hoy = date.today()
 
-        # Límites por rango (no usamos DATE(col) en el WHERE para no romper índices)
+        # Límites por rango
         start_dia = datetime.combine(hoy, time.min)
         end_dia   = start_dia + timedelta(days=1)
 
@@ -97,23 +97,28 @@ class ReportesService:
         start_anio = start_dia.replace(month=1, day=1)
         next_year  = start_anio.replace(year=start_anio.year + 1, month=1, day=1)
 
-        # Counts
+        # Filters: Exclude Staff (id_venta is NULL)
+        common_filters = [Asistencia.id_venta != None]
+
         q_dia = select(func.count()).where(
             and_(
                 Asistencia.fecha_hora_entrada >= start_dia,
                 Asistencia.fecha_hora_entrada <  end_dia,
+                *common_filters
             )
         )
         q_mes = select(func.count()).where(
             and_(
                 Asistencia.fecha_hora_entrada >= start_mes,
                 Asistencia.fecha_hora_entrada <  next_month,
+                *common_filters
             )
         )
         q_anio = select(func.count()).where(
             and_(
                 Asistencia.fecha_hora_entrada >= start_anio,
                 Asistencia.fecha_hora_entrada <  next_year,
+                *common_filters
             )
         )
 
@@ -131,16 +136,19 @@ class ReportesService:
     def serie_asistencias_diarias(self, db: Session, dias: int = 30) -> List[Dict]:
         """
         Retorna [{"fecha": "YYYY-MM-DD", "total": N}, ...] para los últimos `dias`.
+        Only clients (id_venta != None).
         """
         fin   = datetime.combine(date.today(), time.min) + timedelta(days=1)
         inicio = fin - timedelta(days=dias)
 
-        # Nota: agrupamos por DATE(). Si quieres máxima performance, ver columnas generadas abajo.
         stmt = (
             select(func.date(Asistencia.fecha_hora_entrada).label("dia"),
                    func.count().label("total"))
-            .where(and_(Asistencia.fecha_hora_entrada >= inicio,
-                        Asistencia.fecha_hora_entrada <  fin))
+            .where(and_(
+                Asistencia.fecha_hora_entrada >= inicio,
+                Asistencia.fecha_hora_entrada <  fin,
+                Asistencia.id_venta != None
+            ))
             .group_by("dia")
             .order_by("dia")
         )
@@ -151,11 +159,10 @@ class ReportesService:
     def serie_asistencias_mensuales(self, db: Session, meses: int = 12) -> List[Dict]:
         """
         Retorna [{"anio": 2025, "mes": 9, "total": N}, ...]
+        Only clients (id_venta != None).
         """
-        # inicio = primer día del mes (hace `meses`-1 meses)
         hoy = date.today()
         start_mes = date(hoy.year, hoy.month, 1)
-        # retrocede meses
         y, m = start_mes.year, start_mes.month
         m -= (meses - 1)
         while m <= 0:
@@ -163,7 +170,6 @@ class ReportesService:
             y -= 1
         inicio = datetime.combine(date(y, m, 1), time.min)
 
-        # fin = primer día del mes siguiente al actual
         if hoy.month == 12:
             fin = datetime.combine(date(hoy.year + 1, 1, 1), time.min)
         else:
@@ -175,8 +181,11 @@ class ReportesService:
                 extract("month", Asistencia.fecha_hora_entrada).label("mes"),
                 func.count().label("total"),
             )
-            .where(and_(Asistencia.fecha_hora_entrada >= inicio,
-                        Asistencia.fecha_hora_entrada <  fin))
+            .where(and_(
+                Asistencia.fecha_hora_entrada >= inicio,
+                Asistencia.fecha_hora_entrada <  fin,
+                Asistencia.id_venta != None
+            ))
             .group_by("anio", "mes")
             .order_by("anio", "mes")
         )
@@ -187,6 +196,7 @@ class ReportesService:
     def serie_asistencias_anuales(self, db: Session, anios: int = 5) -> List[Dict]:
         """
         Retorna [{"anio": 2021, "total": N}, ...]
+        Only clients (id_venta != None).
         """
         anio_actual = date.today().year
         inicio = datetime.combine(date(anio_actual - (anios - 1), 1, 1), time.min)
@@ -197,8 +207,11 @@ class ReportesService:
                 extract("year", Asistencia.fecha_hora_entrada).label("anio"),
                 func.count().label("total"),
             )
-            .where(and_(Asistencia.fecha_hora_entrada >= inicio,
-                        Asistencia.fecha_hora_entrada <  fin))
+            .where(and_(
+                Asistencia.fecha_hora_entrada >= inicio,
+                Asistencia.fecha_hora_entrada <  fin,
+                Asistencia.id_venta != None
+            ))
             .group_by("anio")
             .order_by("anio")
         )

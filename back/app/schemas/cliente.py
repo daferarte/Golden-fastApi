@@ -9,11 +9,12 @@ class ClienteBase(BaseModel):
     documento: str
     fecha_nacimiento: date
     telefono: Optional[str] = None
-    correo: EmailStr
+    correo: Optional[str] = None
     direccion: Optional[str] = None
     fotografia: Optional[str] = None
     id_tipo_descuento: Optional[int] = None
     id_huella: Optional[int] = None
+    observaciones: Optional[str] = None
 
 class ClienteCreateRequest(ClienteBase):
     huella_template: Optional[str] = None

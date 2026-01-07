@@ -2,6 +2,8 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from pathlib import Path
 import re
+from fastapi import Depends
+from app.api import deps
 
 router = APIRouter(prefix="/files", tags=["files"])
 
